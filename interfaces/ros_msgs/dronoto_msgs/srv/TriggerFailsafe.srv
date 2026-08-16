@@ -1,0 +1,9 @@
+# Force le superviseur dans un etat de securite.
+# Utilise par l'executif de mission, les tests, et plus tard les commandes
+# venues du sol.
+
+uint8 target_state      # valeur de SafetyState
+string reason
+---
+bool accepted
+string message
