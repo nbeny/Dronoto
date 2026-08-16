@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<!--
+  Geometrie des capteurs du drone Dronoto.
+
+  Les positions correspondent a la configuration materielle cible decrite dans
+  docs/architecture/16-materiel.md. Les capteurs eux-memes sont branches en P2,
+  mais leurs reperes existent des maintenant : cela evite de rejouer les
+  calibrations de bras de levier plus tard.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="x500_dronoto">
+
+  <link name="base_link">
+    <visual>
+      <geometry><box size="0.35 0.35 0.10"/></geometry>
+      <material name="carbon"><color rgba="0.15 0.15 0.18 1.0"/></material>
+    </visual>
+  </link>
+
+  <!-- IMU : dans le controleur de vol, au centre -->
+  <link name="imu_link"/>
+  <joint name="base_to_imu" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- LiDAR Livox Mid-360, monte au-dessus du corps (branche en P2) -->
+  <link name="lidar_link"/>
+  <joint name="base_to_lidar" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="0.10 0 0.08" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Camera avant, inclinee de 15 degres vers le bas (branchee en P2) -->
+  <link name="cam_front_link"/>
+  <joint name="base_to_cam_front" type="fixed">
+    <parent link="base_link"/>
+    <child link="cam_front_link"/>
+    <origin xyz="0.12 0 0.02" rpy="0 0.2618 0"/>
+  </joint>
+
+  <!-- Antenne GNSS, sur mat -->
+  <link name="gnss_link"/>
+  <joint name="base_to_gnss" type="fixed">
+    <parent link="base_link"/>
+    <child link="gnss_link"/>
+    <origin xyz="-0.08 0 0.15" rpy="0 0 0"/>
+  </joint>
+
+</robot>

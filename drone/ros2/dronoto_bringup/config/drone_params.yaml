@@ -1,0 +1,32 @@
+px4_interface:
+  ros__parameters:
+    odom_frame: "odom"
+    base_frame: "base_link"
+    setpoint_stale_hold_s: 0.5
+
+safety_supervisor:
+  ros__parameters:
+    telemetry_timeout_s: 1.0
+    setpoint_timeout_s: 0.5
+    battery_critical_ratio: 0.10
+    battery_return_ratio: 0.25
+
+trajectory_follower:
+  ros__parameters:
+    max_speed_ms: 4.0
+    max_climb_ms: 2.0
+    goal_tolerance_m: 0.5
+    slowdown_radius_m: 3.0
+
+mission_executive:
+  ros__parameters:
+    takeoff_altitude_m: 5.0
+    waypoint_tolerance_m: 0.8
+    phase_timeout_s: 60.0
+    # false par defaut : lancer la pile ne doit JAMAIS faire decoller un
+    # aeronef par surprise. Les scenarios de test l'activent explicitement.
+    autostart: false
+    # NE PAS ecrire « waypoints: [] » ici. Une liste vide en YAML n'a pas de
+    # type, ROS 2 ne peut pas l'inferer, et declare_parameter leve une
+    # exception qui tue le noeud au demarrage. Le defaut (liste vide) est
+    # declare cote C++ ; les scenarios fournissent des valeurs reelles.
