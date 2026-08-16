@@ -1,0 +1,35 @@
+# ROS 2 / colcon
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# C++
+*.o
+*.so
+compile_commands.json
+
+# Artefacts de test
+tests/results/
+*.bag
+*.mcap
+
+# Modèles IA (gérés hors git, cf. docs/architecture/15-structure-depot.md)
+models/**/*.onnx
+
+# PX4 : cloné hors du dépôt par infrastructure/scripts/install_px4.sh
+# (30 000+ fichiers, cf. ADR-0008)
+simulation/px4/PX4-Autopilot/
+
+# Éditeurs / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

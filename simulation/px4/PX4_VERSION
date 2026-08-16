@@ -1,0 +1,7 @@
+# Version de PX4-Autopilot utilisée par ce projet.
+# Verrouillée délibérément : une dérive de version d'autopilote produit des
+# messages silencieusement corrompus (cf. docs/architecture/05-integration-px4.md).
+# La mettre à jour est un acte testé, pas un effet de bord.
+#
+# Utilisée par infrastructure/scripts/install_px4.sh et par la CI.
+v1.16.0

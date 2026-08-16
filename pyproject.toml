@@ -1,0 +1,18 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [
+    "simulation/px4/PX4-Autopilot",
+    "build",
+    "install",
+    "log",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "scenario: test de scénario SITL (lent, niveau L3)",
+]

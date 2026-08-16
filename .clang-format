@@ -1,0 +1,10 @@
+---
+BasedOnStyle: Google
+ColumnLimit: 100
+IndentWidth: 2
+AccessModifierOffset: -2
+AlwaysBreakTemplateDeclarations: Yes
+DerivePointerAlignment: false
+PointerAlignment: Middle
+ReflowComments: true
+SortIncludes: true
