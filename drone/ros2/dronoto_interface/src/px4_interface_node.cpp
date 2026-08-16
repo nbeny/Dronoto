@@ -112,16 +112,22 @@ public:
     makeTriggerService("px4/disarm", "commande de desarmement envoyee", [this] {
       sendCommand(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0f);
     });
-    makeTriggerService("px4/set_offboard", "bascule en offboard demandee", [this] {
-      // param1 = 1 (mode personnalise), param2 = 6 (PX4_CUSTOM_MAIN_MODE_OFFBOARD)
-      sendCommand(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1.0f, 6.0f);
+    makeTriggerService("px4/set_offboard", "flux offboard demarre, bascule differee", [this] {
+      // Procedure d'entree en offboard documentee par PX4 : emettre le flux
+      // AVANT de demander le mode. On arme le flux ici ; publishOffboardStream()
+      // enverra la commande de bascule une fois assez de consignes emises.
+      offboard_stream_enabled_ = true;
+      offboard_switch_pending_ = true;
+      offboard_stream_cycles_ = 0;
     });
     makeTriggerService("px4/takeoff", "decollage PX4 demande", [this] {
+      disableOffboardStream();  // PX4 natif reprend le bus de consignes
       // Mode natif PX4 : mieux teste que le decollage en offboard et gere
       // correctement l'effet de sol (docs/architecture/05-integration-px4.md).
       sendCommand(VehicleCommand::VEHICLE_CMD_NAV_TAKEOFF);
     });
     makeTriggerService("px4/land", "atterrissage PX4 demande", [this] {
+      disableOffboardStream();  // PX4 natif reprend le bus de consignes
       sendCommand(VehicleCommand::VEHICLE_CMD_NAV_LAND);
     });
 
@@ -258,6 +264,22 @@ private:
       return;  // pas encore de liaison PX4 : rien a piloter
     }
 
+    // NE PAS emettre tant que l'offboard n'est pas demande.
+    //
+    // /fmu/in/trajectory_setpoint n'est pas une entree « offboard » dediee :
+    // c'est le bus uORB interne par lequel TOUS les modes de vol pilotent le
+    // controleur de position. Y publier des le demarrage met notre flux en
+    // concurrence avec le navigateur pendant AUTO_TAKEOFF et AUTO_LAND, et le
+    // vehicule devient incontrolable — constate : PX4 commande la descente et
+    // le drone monte jusqu'a 14 km.
+    //
+    // On n'emet donc qu'a partir du moment ou l'offboard est demande, ce qui
+    // est aussi la procedure d'entree documentee par PX4 : le flux precede la
+    // commande de bascule.
+    if (!offboard_stream_enabled_) {
+      return;
+    }
+
     const double age_s = have_setpoint_ ? (now() - last_setpoint_time_).seconds() : 1e9;
     const bool stale = (age_s >= stale_hold_s_);
 
@@ -312,6 +334,24 @@ private:
     }
 
     trajectory_pub_->publish(sp);
+
+    // PX4 exige un flux etabli avant d'accepter la bascule en offboard.
+    // 20 cycles a 20 Hz = 1 s, largement au-dessus du minimum de 2 Hz.
+    if (offboard_switch_pending_ && ++offboard_stream_cycles_ >= 20) {
+      offboard_switch_pending_ = false;
+      // param1 = 1 (mode personnalise), param2 = 6 (PX4_CUSTOM_MAIN_MODE_OFFBOARD)
+      sendCommand(px4_msgs::msg::VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1.0f, 6.0f);
+      RCLCPP_INFO(get_logger(), "flux offboard etabli, bascule demandee");
+    }
+  }
+
+  /// Coupe le flux offboard : utilise quand on rend la main a un mode PX4
+  /// natif (atterrissage, RTL), pour ne plus concurrencer le navigateur.
+  void disableOffboardStream()
+  {
+    offboard_stream_enabled_ = false;
+    offboard_switch_pending_ = false;
+    offboard_stream_cycles_ = 0;
   }
 
   /// Detecte le cas « on recoit l'odometrie mais pas le statut ».
@@ -379,6 +419,9 @@ private:
   rclcpp::Time last_setpoint_time_{0, 0, RCL_ROS_TIME};
   bool have_setpoint_{false};
   bool stale_reported_{false};
+  bool offboard_stream_enabled_{false};
+  bool offboard_switch_pending_{false};
+  int offboard_stream_cycles_{0};
 
   rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr odometry_sub_;
   rclcpp::Subscription<px4_msgs::msg::VehicleStatus>::SharedPtr status_sub_;

@@ -51,6 +51,10 @@ public:
     declare_parameter<double>("takeoff_altitude_m", 5.0);
     declare_parameter<double>("waypoint_tolerance_m", 0.8);
     declare_parameter<double>("phase_timeout_s", 60.0);
+    // Doit refleter MIS_TAKEOFF_ALT de l'airframe PX4 : c'est PX4 qui
+    // decide de l'altitude du decollage natif, notre controleur prend le
+    // relais ensuite pour rejoindre takeoff_altitude_m.
+    declare_parameter<double>("px4_takeoff_alt_m", 3.0);
     declare_parameter<bool>("autostart", false);
     // Waypoints aplatis : [x1, y1, z1, x2, y2, z2, ...] en repere ENU local.
     //
@@ -72,6 +76,7 @@ public:
     takeoff_altitude_ = get_parameter("takeoff_altitude_m").as_double();
     waypoint_tolerance_ = get_parameter("waypoint_tolerance_m").as_double();
     phase_timeout_s_ = get_parameter("phase_timeout_s").as_double();
+    px4_takeoff_alt_m_ = get_parameter("px4_takeoff_alt_m").as_double();
     autostart_ = get_parameter("autostart").as_bool();
 
     const auto waypoints_param = get_parameter("waypoints");
@@ -202,8 +207,13 @@ private:
         break;
 
       case Phase::TAKEOFF_MODE:
-        if (telemetry_.nav_state ==
-            px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_AUTO_TAKEOFF) {
+        // On laisse a PX4 le temps d'accepter le changement de mode, puis on
+        // arme — comme le fait commander takeoff, qui attend l'acquittement.
+        //
+        // On ne conditionne PAS sur nav_state == AUTO_TAKEOFF : au sol et
+        // desarme, PX4 rapporte AUTO_LOITER puis AUTO_LAND, et cette condition
+        // n'est jamais satisfaite. Le mode reel s'etablit a l'armement.
+        if ((now() - phase_start_).seconds() > 1.5) {
           callTrigger(arm_client_);
           setPhase(Phase::ARMING, "ARMING");
         }
@@ -223,9 +233,7 @@ private:
         // monte a MIS_TAKEOFF_ALT, qui n'a aucune raison d'egaler l'altitude
         // demandee par la mission. Attendre un seuil qu'il n'atteindra jamais
         // bloque la mission jusqu'au delai de phase.
-        if (telemetry_.nav_state !=
-              px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_AUTO_TAKEOFF &&
-            telemetry_.altitude_relative_m > 1.0f) {
+        if (telemetry_.altitude_relative_m > px4_takeoff_alt_m_ * 0.8) {
           publishFirstGoalAtCurrentPosition();
           callTrigger(offboard_client_);
           setPhase(Phase::ENTER_OFFBOARD, "ENTER_OFFBOARD");
@@ -370,6 +378,7 @@ private:
   double takeoff_altitude_{5.0};
   double waypoint_tolerance_{0.8};
   double phase_timeout_s_{60.0};
+  double px4_takeoff_alt_m_{3.0};
   bool autostart_{false};
 
   rclcpp::Subscription<dronoto_msgs::msg::VehicleTelemetry>::SharedPtr telemetry_sub_;
