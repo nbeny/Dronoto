@@ -1,0 +1,59 @@
+name: "Navigation par waypoints"
+description: >
+  Parcours d'un carré de 20 m de côté à 6 m d'altitude, puis retour au point de
+  départ et atterrissage. Vérifie la précision d'arrivée et l'absence de
+  dépassement. C'est le critère de sortie principal de P1.
+
+headless: true
+timeout_s: 360
+
+params:
+  mission_executive:
+    ros__parameters:
+      autostart: true
+      takeoff_altitude_m: 6.0
+      waypoint_tolerance_m: 0.8
+      phase_timeout_s: 90.0
+      # Carré de 20 m parcouru dans le sens trigonométrique, retour à l'origine.
+      waypoints: [20.0,  0.0, 6.0,
+                  20.0, 20.0, 6.0,
+                   0.0, 20.0, 6.0,
+                   0.0,  0.0, 6.0]
+  trajectory_follower:
+    ros__parameters:
+      max_speed_ms: 4.0
+      max_climb_ms: 2.0
+      goal_tolerance_m: 0.5
+      slowdown_radius_m: 3.0
+  safety_supervisor:
+    ros__parameters:
+      telemetry_timeout_s: 1.0
+      setpoint_timeout_s: 0.5
+      battery_critical_ratio: 0.10
+      battery_return_ratio: 0.25
+  px4_interface:
+    ros__parameters:
+      odom_frame: "odom"
+      base_frame: "base_link"
+      setpoint_stale_hold_s: 0.5
+
+timeline:
+  - at: 35
+    assert:
+      altitude_m: {min: 5.0}
+      safety_state: "NOMINAL"
+
+assert_continuous:
+  altitude_m: {max: 10.0}
+  battery: {min: 0.40}
+
+final_assertions:
+  phase: "DONE"
+  final_altitude_m: {max: 0.5}
+  final_armed: false
+  # Critère de sortie P1 : précision d'arrivée au waypoint meilleure que 0,5 m.
+  # Le dernier waypoint est l'origine, donc la distance finale la mesure.
+  distance_to_home_m: {max: 0.5}
+  max_altitude_m: {min: 5.5, max: 10.0}
+  events_contain:
+    - "MISSION_COMPLETE"

@@ -1,0 +1,61 @@
+name: "Décollage, stationnaire, atterrissage"
+description: >
+  Vérifie la séquence de vol de base : vérifications préalables, armement,
+  décollage à 5 m, bascule en offboard, atterrissage et désarmement.
+  C'est le scénario le plus fondamental du projet : s'il échoue, rien d'autre
+  n'a de sens.
+
+headless: true
+timeout_s: 180
+
+params:
+  mission_executive:
+    ros__parameters:
+      autostart: true
+      takeoff_altitude_m: 5.0
+      waypoint_tolerance_m: 0.8
+      phase_timeout_s: 60.0
+  trajectory_follower:
+    ros__parameters:
+      max_speed_ms: 4.0
+      max_climb_ms: 2.0
+      goal_tolerance_m: 0.5
+      slowdown_radius_m: 3.0
+  safety_supervisor:
+    ros__parameters:
+      telemetry_timeout_s: 1.0
+      setpoint_timeout_s: 0.5
+      battery_critical_ratio: 0.10
+      battery_return_ratio: 0.25
+  px4_interface:
+    ros__parameters:
+      odom_frame: "odom"
+      base_frame: "base_link"
+      setpoint_stale_hold_s: 0.5
+
+timeline:
+  - at: 5
+    assert:
+      # Au sol, avant le décollage : la batterie doit être quasi pleine.
+      battery: {min: 0.90}
+
+  - at: 30
+    assert:
+      altitude_m: {min: 4.0}
+      armed: true
+
+assert_continuous:
+  # Aucun dépassement d'altitude : le contrôleur ne doit pas osciller.
+  altitude_m: {max: 8.0}
+  # La batterie ne doit jamais approcher le seuil critique sur un vol si court ;
+  # si c'est le cas, le modèle énergétique ou la mission ont un problème.
+  battery: {min: 0.60}
+
+final_assertions:
+  phase: "DONE"
+  final_altitude_m: {max: 0.5}
+  final_armed: false
+  max_altitude_m: {min: 4.5, max: 8.0}
+  distance_to_home_m: {max: 3.0}
+  events_contain:
+    - "MISSION_COMPLETE"

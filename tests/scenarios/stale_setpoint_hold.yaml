@@ -1,0 +1,67 @@
+name: "Plantage du suivi de trajectoire : passage en HOLD"
+description: >
+  Tue trajectory_follower en plein vol et vérifie que le drone se stabilise au
+  lieu de partir en vrille. Prouve la politique de consigne périmée de
+  px4_interface et la condition STALE_SETPOINT du superviseur.
+  Troisième critère de sortie de P1.
+
+headless: true
+timeout_s: 240
+
+params:
+  mission_executive:
+    ros__parameters:
+      autostart: true
+      takeoff_altitude_m: 8.0
+      waypoint_tolerance_m: 0.8
+      phase_timeout_s: 120.0
+      # Un waypoint lointain : le drone sera en route au moment du plantage.
+      waypoints: [60.0, 0.0, 8.0]
+  trajectory_follower:
+    ros__parameters:
+      max_speed_ms: 4.0
+      max_climb_ms: 2.0
+      goal_tolerance_m: 0.5
+      slowdown_radius_m: 3.0
+  safety_supervisor:
+    ros__parameters:
+      telemetry_timeout_s: 1.0
+      setpoint_timeout_s: 0.5
+      battery_critical_ratio: 0.10
+      battery_return_ratio: 0.25
+  px4_interface:
+    ros__parameters:
+      odom_frame: "odom"
+      base_frame: "base_link"
+      setpoint_stale_hold_s: 0.5
+
+timeline:
+  - at: 40
+    assert:
+      altitude_m: {min: 7.0}
+      safety_state: "NOMINAL"
+
+  - at: 45
+    kill_node: "trajectory_follower_node"
+
+  # 1,5 s après le plantage : le superviseur DOIT avoir basculé.
+  # Marge confortable sur le budget de 500 ms, pour absorber la période
+  # d'échantillonnage de l'observateur (100 ms) et celle du superviseur (100 ms).
+  - at: 46.5
+    assert:
+      safety_state: "HOLD"
+
+  # Le drone doit rester en l'air et stable, pas tomber ni dériver.
+  - at: 60
+    assert:
+      safety_state: "HOLD"
+      altitude_m: {min: 6.0, max: 10.0}
+
+assert_continuous:
+  altitude_m: {max: 12.0}
+
+final_assertions:
+  # La mission est interrompue par le délai de phase : c'est le résultat ATTENDU.
+  # Ce qui compte est que le drone soit resté maîtrisé tout du long.
+  events_contain:
+    - "STALE_SETPOINT"
