@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>dronoto_interface</name>
+  <version>0.1.0</version>
+  <description>Frontière unique avec PX4 : traduction uORB vers messages ROS 2 normalisés.
+    Aucun autre nœud ne communique avec PX4.</description>
+  <maintainer email="ynebocin@gmail.com">Nicolas BENY</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>px4_msgs</depend>
+  <depend>dronoto_msgs</depend>
+  <depend>dronoto_core</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>tf2_ros</depend>
+  <depend>eigen</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
