@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>dronoto_safety</name>
+  <version>0.1.0</version>
+  <description>Superviseur de sécurité : machine à états et veto sur les consignes.
+    Autorité absolue sur la chaîne de contrôle.</description>
+  <maintainer email="ynebocin@gmail.com">Nicolas BENY</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>dronoto_msgs</depend>
+  <depend>dronoto_core</depend>
+  <depend>px4_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
