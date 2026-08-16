@@ -48,8 +48,30 @@ lancement automatique par le fichier de lancement. Sur matériel réel : UART à
 (TELEM2) ou, mieux, Ethernet si le calculateur et le Pixhawk le supportent — le Pixhawk 6X
 a un port Ethernet, ce qui supprime le goulot série et sa fragilité.
 
-**Versionnement des messages.** PX4 ≥ 1.16 introduit le versionnement des messages. Deux
-conséquences pratiques à respecter dès le début :
+**Versionnement des messages.** PX4 ≥ 1.16 introduit le versionnement des messages.
+
+> **Constaté à l'implémentation, et coûteux.** PX4 v1.16 publie `VehicleStatus` sur le
+> topic **versionné** `/fmu/out/vehicle_status_v1`. Le topic `/fmu/out/vehicle_status`
+> apparaît toujours dans `ros2 topic list`, avec le bon type — mais **ne porte aucune
+> donnée**. S'y abonner ne produit ni erreur, ni avertissement, ni message : la structure
+> reste simplement à sa valeur par défaut.
+>
+> Conséquence observée : `armed` et `preflight_ok` restaient faux en permanence, l'exécutif
+> de mission attendait indéfiniment une condition qui ne pouvait pas arriver, et **rien
+> dans les journaux ne l'indiquait**. PX4 était prêt à armer depuis le début.
+>
+> Deux protections en découlent, toutes deux implémentées :
+> 1. `px4_interface` s'abonne au topic versionné **et** au topic historique, pour tolérer
+>    les deux conventions.
+> 2. Un **chien de garde** émet un événement `CRITICAL` si l'odométrie arrive mais pas le
+>    statut au bout de 10 s. Une panne silencieuse devient bruyante — c'est la vraie leçon,
+>    plus que le correctif lui-même.
+>
+> Vérification systématique avant d'écrire un abonnement PX4 :
+> `ros2 topic list | grep '_v[0-9]*$'` puis `ros2 topic hz <topic> --qos-reliability
+> best_effort` pour confirmer qu'il publie réellement.
+
+Deux conséquences pratiques à respecter dès le début :
 
 1. Le paquet `px4_msgs` est épinglé sur la branche correspondant à la version de PX4
    utilisée (`release/1.16`), pas sur `main`. Un `px4_msgs` désaligné produit des messages

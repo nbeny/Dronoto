@@ -9,6 +9,7 @@
 #include "dronoto_msgs/msg/vehicle_telemetry.hpp"
 #include "dronoto_msgs/srv/trigger_failsafe.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "px4_msgs/msg/vehicle_status.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/string.hpp"
@@ -22,9 +23,11 @@ enum class Phase
 {
   WAIT_TELEMETRY,
   PREFLIGHT,
+  TAKEOFF_MODE,    ///< demander AUTO_TAKEOFF, AVANT d'armer
   ARMING,
-  TAKEOFF,
+  CLIMBING,        ///< PX4 execute le decollage jusqu'a MIS_TAKEOFF_ALT
   ENTER_OFFBOARD,
+  CLIMB_TO_MISSION,///< en offboard, monter a l'altitude de mission
   WAYPOINTS,
   LANDING,
   DONE,
@@ -188,6 +191,19 @@ private:
         if (telemetry_.preflight_ok && telemetry_.ekf_position_valid &&
             telemetry_.battery_remaining > 0.30f) {
           requestSafety(SafetyState::READY, "verifications passees");
+          // ORDRE CRITIQUE : demander le mode decollage AVANT d'armer, comme le
+          // fait PX4 lui-meme (Commander.cpp, commande « takeoff »). Armer en
+          // AUTO_LOITER au sol laisse l'integrateur d'altitude du controleur de
+          // position se charger, et le drone part pleine poussee des qu'il
+          // quitte le sol — constate : montee incontrolee jusqu'a 14 km.
+          callTrigger(takeoff_client_);
+          setPhase(Phase::TAKEOFF_MODE, "TAKEOFF_MODE");
+        }
+        break;
+
+      case Phase::TAKEOFF_MODE:
+        if (telemetry_.nav_state ==
+            px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_AUTO_TAKEOFF) {
           callTrigger(arm_client_);
           setPhase(Phase::ARMING, "ARMING");
         }
@@ -196,16 +212,20 @@ private:
       case Phase::ARMING:
         if (telemetry_.armed) {
           requestSafety(SafetyState::ARMED, "arme");
-          callTrigger(takeoff_client_);
           requestSafety(SafetyState::TAKEOFF, "decollage");
-          setPhase(Phase::TAKEOFF, "TAKEOFF");
+          setPhase(Phase::CLIMBING, "CLIMBING");
         }
         break;
 
-      case Phase::TAKEOFF:
-        // Attendre 90 % de l'altitude cible : exiger 100 % ferait patiner sur
-        // le regime permanent du controleur d'altitude.
-        if (telemetry_.altitude_relative_m > 0.9 * takeoff_altitude_) {
+      case Phase::CLIMBING:
+        // On attend que PX4 declare le decollage TERMINE (il quitte
+        // AUTO_TAKEOFF pour AUTO_LOITER), et non un seuil d'altitude : PX4
+        // monte a MIS_TAKEOFF_ALT, qui n'a aucune raison d'egaler l'altitude
+        // demandee par la mission. Attendre un seuil qu'il n'atteindra jamais
+        // bloque la mission jusqu'au delai de phase.
+        if (telemetry_.nav_state !=
+              px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_AUTO_TAKEOFF &&
+            telemetry_.altitude_relative_m > 1.0f) {
           publishFirstGoalAtCurrentPosition();
           callTrigger(offboard_client_);
           setPhase(Phase::ENTER_OFFBOARD, "ENTER_OFFBOARD");
@@ -215,6 +235,15 @@ private:
       case Phase::ENTER_OFFBOARD:
         if (telemetry_.offboard_active) {
           requestSafety(SafetyState::NOMINAL, "offboard actif");
+          publishClimbGoal();
+          setPhase(Phase::CLIMB_TO_MISSION, "CLIMB_TO_MISSION");
+        }
+        break;
+
+      case Phase::CLIMB_TO_MISSION:
+        // PX4 a assure le decollage (effet de sol, detection de sol) ; notre
+        // controleur prend le relais pour rejoindre l'altitude de mission.
+        if (telemetry_.altitude_relative_m > 0.9 * takeoff_altitude_) {
           waypoint_index_ = 0;
           if (waypoints_.empty()) {
             startLanding();
@@ -271,6 +300,18 @@ private:
     goal.header.frame_id = "odom";
     goal.pose = telemetry_.pose;
     goal_pub_->publish(goal);
+  }
+
+  /// Objectif de montee : position horizontale courante, altitude de mission.
+  void publishClimbGoal()
+  {
+    geometry_msgs::msg::PoseStamped goal;
+    goal.header.stamp = now();
+    goal.header.frame_id = "odom";
+    goal.pose = telemetry_.pose;
+    goal.pose.position.z = takeoff_altitude_;
+    goal_pub_->publish(goal);
+    RCLCPP_INFO(get_logger(), "montee vers %.1f m sous controle offboard", takeoff_altitude_);
   }
 
   void publishCurrentWaypoint()

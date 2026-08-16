@@ -55,9 +55,25 @@ public:
       "/fmu/out/vehicle_odometry", px4_qos,
       [this](px4_msgs::msg::VehicleOdometry::UniquePtr msg) { onOdometry(*msg); });
 
+    // VERSIONNEMENT DES MESSAGES (PX4 >= 1.16).
+    //
+    // PX4 publie VehicleStatus sur le topic VERSIONNE /fmu/out/vehicle_status_v1.
+    // Le topic /fmu/out/vehicle_status existe encore dans la liste mais ne
+    // porte AUCUNE donnee. S'y abonner ne produit ni erreur ni avertissement :
+    // le message reste simplement a sa valeur par defaut, donc armed=false et
+    // preflight_ok=false pour toujours, et le drone n'arme jamais.
+    //
+    // On s'abonne aux deux pour rester tolerant a la version de PX4, et le
+    // chien de garde ci-dessous rend l'absence de donnees BRUYANTE plutot que
+    // silencieuse — c'est la vraie lecon de ce bug.
+    auto on_status = [this](px4_msgs::msg::VehicleStatus::UniquePtr msg) {
+      status_ = *msg;
+      status_seen_ = true;
+    };
     status_sub_ = create_subscription<px4_msgs::msg::VehicleStatus>(
-      "/fmu/out/vehicle_status", px4_qos,
-      [this](px4_msgs::msg::VehicleStatus::UniquePtr msg) { status_ = *msg; });
+      "/fmu/out/vehicle_status_v1", px4_qos, on_status);
+    status_legacy_sub_ = create_subscription<px4_msgs::msg::VehicleStatus>(
+      "/fmu/out/vehicle_status", px4_qos, on_status);
 
     battery_sub_ = create_subscription<px4_msgs::msg::BatteryStatus>(
       "/fmu/out/battery_status", px4_qos,
@@ -112,6 +128,11 @@ public:
     // 20 Hz : bien au-dessus du minimum de 2 Hz exige par PX4 pour l'offboard.
     offboard_timer_ = create_wall_timer(50ms, [this] { publishOffboardStream(); });
 
+    // Chien de garde des abonnements PX4. Une desynchronisation de version de
+    // topic ne produit aucune erreur : le message reste a sa valeur par defaut
+    // et le systeme se bloque en silence. On la rend bruyante.
+    subscription_watchdog_ = create_wall_timer(1s, [this] { checkPx4Subscriptions(); });
+
     RCLCPP_INFO(get_logger(), "px4_interface demarre, en attente des messages PX4");
   }
 
@@ -139,6 +160,7 @@ private:
   {
     if (!px4_seen_) {
       px4_seen_ = true;
+      first_odometry_time_ = now();
       RCLCPP_INFO(get_logger(), "Premier message PX4 recu : liaison uXRCE-DDS active");
     }
 
@@ -292,6 +314,28 @@ private:
     trajectory_pub_->publish(sp);
   }
 
+  /// Detecte le cas « on recoit l'odometrie mais pas le statut ».
+  ///
+  /// C'est la signature d'une desynchronisation de nom ou de version de topic.
+  /// Sans ce controle, le systeme se bloque en PREFLIGHT sans qu'aucun journal
+  /// n'indique pourquoi : le message reste simplement a sa valeur par defaut.
+  void checkPx4Subscriptions()
+  {
+    if (!px4_seen_ || status_seen_ || subscription_fault_reported_) {
+      return;
+    }
+    if ((now() - first_odometry_time_).seconds() < 10.0) {
+      return;  // laisser le temps a la decouverte DDS
+    }
+
+    subscription_fault_reported_ = true;
+    publishEvent(
+      dronoto_msgs::msg::SafetyEvent::CRITICAL, "PX4_STATUS_MISSING",
+      "odometrie recue mais aucun VehicleStatus depuis 10 s : verifier le nom "
+      "du topic (versionnement PX4, ex. vehicle_status_v1) et l'alignement de "
+      "px4_msgs sur simulation/px4/PX4_VERSION");
+  }
+
   void sendCommand(uint32_t command, float param1 = 0.0f, float param2 = 0.0f)
   {
     px4_msgs::msg::VehicleCommand cmd{};
@@ -323,6 +367,9 @@ private:
   px4_msgs::msg::BatteryStatus battery_{};
   px4_msgs::msg::VehicleLocalPosition local_pos_{};
   bool px4_seen_{false};
+  bool status_seen_{false};
+  bool subscription_fault_reported_{false};
+  rclcpp::Time first_odometry_time_{0, 0, RCL_ROS_TIME};
 
   std::string odom_frame_;
   std::string base_frame_;
@@ -335,6 +382,7 @@ private:
 
   rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr odometry_sub_;
   rclcpp::Subscription<px4_msgs::msg::VehicleStatus>::SharedPtr status_sub_;
+  rclcpp::Subscription<px4_msgs::msg::VehicleStatus>::SharedPtr status_legacy_sub_;
   rclcpp::Subscription<px4_msgs::msg::BatteryStatus>::SharedPtr battery_sub_;
   rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr local_pos_sub_;
   rclcpp::Subscription<dronoto_msgs::msg::ControlSetpoint>::SharedPtr setpoint_sub_;
@@ -349,6 +397,7 @@ private:
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   std::vector<rclcpp::ServiceBase::SharedPtr> services_;
   rclcpp::TimerBase::SharedPtr offboard_timer_;
+  rclcpp::TimerBase::SharedPtr subscription_watchdog_;
 };
 
 int main(int argc, char ** argv)

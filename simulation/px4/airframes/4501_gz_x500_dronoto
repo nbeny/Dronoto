@@ -16,19 +16,23 @@ param set-default SENS_EN_GPSSIM 1
 param set-default SENS_EN_BAROSIM 1
 param set-default SENS_EN_MAGSIM 1
 
+# Geometrie des rotors : valeurs de l'airframe de reference PX4 4001_gz_x500.
+# Le x500 n'est PAS carre (bras avant/arriere plus courts que gauche/droite) :
+# utiliser 0.15/0.15 comme au premier jet fausse la matrice d'allocation de
+# controle de ~30 % sur les bras de levier en roulis et tangage.
 param set-default CA_AIRFRAME 0
 param set-default CA_ROTOR_COUNT 4
-param set-default CA_ROTOR0_PX 0.15
-param set-default CA_ROTOR0_PY 0.15
+param set-default CA_ROTOR0_PX 0.13
+param set-default CA_ROTOR0_PY 0.22
 param set-default CA_ROTOR0_KM 0.05
-param set-default CA_ROTOR1_PX -0.15
-param set-default CA_ROTOR1_PY -0.15
+param set-default CA_ROTOR1_PX -0.13
+param set-default CA_ROTOR1_PY -0.20
 param set-default CA_ROTOR1_KM 0.05
-param set-default CA_ROTOR2_PX 0.15
-param set-default CA_ROTOR2_PY -0.15
+param set-default CA_ROTOR2_PX 0.13
+param set-default CA_ROTOR2_PY -0.22
 param set-default CA_ROTOR2_KM -0.05
-param set-default CA_ROTOR3_PX -0.15
-param set-default CA_ROTOR3_PY 0.15
+param set-default CA_ROTOR3_PX -0.13
+param set-default CA_ROTOR3_PY 0.20
 param set-default CA_ROTOR3_KM -0.05
 
 param set-default SIM_GZ_EC_FUNC1 101
@@ -44,13 +48,42 @@ param set-default SIM_GZ_EC_MAX2 1000
 param set-default SIM_GZ_EC_MAX3 1000
 param set-default SIM_GZ_EC_MAX4 1000
 
+# Poussee au stationnaire : presente dans l'airframe de reference et absente du
+# premier jet. Sans elle, le controleur d'altitude part d'une estimation fausse
+# et produit un depassement au decollage.
+param set-default MPC_THR_HOVER 0.60
+
 # --- Parametres Dronoto ---
+# Failsafe de perte de liaison sol : DESACTIVE (0).
+#
+# Ce n'est pas un contournement de confort. La lecture de
+# rcAndDataLinkCheck.cpp montre que NAV_DLL_ACT > 0 rend une station sol
+# connectee OBLIGATOIRE pour armer, dans tous les modes :
+#     bool gcs_connection_required = _param_nav_dll_act.get() > 0;
+#     NavModes affected_modes = gcs_connection_required ? NavModes::All : ...
+#
+# L'airframe de reference PX4 le met a 2, ce qui impose QGroundControl pour
+# armer — incompatible avec un drone concu pour voler radio coupee
+# (docs/architecture/09-communication.md, section 5).
+#
+# La perte de liaison reste geree, mais par NOTRE superviseur, avec des
+# politiques configurables par mission. Le failsafe de perte offboard
+# (COM_OF_LOSS_T), lui, reste actif : c'est celui qui protege reellement contre
+# une defaillance du calculateur embarque.
+param set-default NAV_DLL_ACT 0
+
 # Limites de mission : docs/architecture/03-simulation.md
 param set-default MPC_XY_VEL_MAX 12.0
 param set-default MPC_Z_VEL_MAX_UP 3.0
 param set-default MPC_Z_VEL_MAX_DN 1.5
 param set-default MPC_TKO_SPEED 1.5
 param set-default MPC_LAND_SPEED 0.7
+
+# Altitude du decollage PX4 natif. PX4 assure la phase la plus delicate (effet
+# de sol, detection de sol) jusqu'a cette altitude ; notre controleur offboard
+# prend ensuite le relais pour rejoindre l'altitude de mission. Cette valeur n'a
+# donc pas a egaler takeoff_altitude_m de la mission.
+param set-default MIS_TAKEOFF_ALT 3.0
 
 # Fenetre de tolerance offboard. Coherent avec le seuil STALE_SETPOINT de
 # px4_interface : px4_interface republie a 20 Hz et bascule en maintien de

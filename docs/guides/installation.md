@@ -208,6 +208,10 @@ bash infrastructure/scripts/run_p1_exit_criteria.sh
 | Symptôme | Cause |
 |---|---|
 | `ros2 topic echo /fmu/out/...` reste muet, **sans erreur** | QoS. PX4 publie en `BEST_EFFORT` ; ajouter `--qos-reliability best_effort`. Dans le code, utiliser `rclcpp::SensorDataQoS()`. |
+| Un topic PX4 existe, a le bon type, mais ne publie **jamais** | Versionnement PX4 ≥ 1.16. `vehicle_status` est vide ; les données sont sur `vehicle_status_v1`. Vérifier avec `ros2 topic list \| grep '_v[0-9]*$'`. |
+| Le drone n'arme jamais, aucun message d'erreur | Même cause : `VehicleStatus` non reçu → `preflight_ok` figé à faux. Le chien de garde de `px4_interface` émet désormais `PX4_STATUS_MISSING`. |
+| PX4 écrit des mégaoctets de `pxh>` et sature un cœur | Console interactive sans terminal attaché. Lancer PX4 avec `-d` (mode démon) — c'est le défaut de `run_sim.sh`. |
+| Un test passe puis échoue sans changement | PX4 SITL persiste ses paramètres dans `rootfs/parameters.bson`, et `param set-default` n'écrase jamais une valeur enregistrée. `run_sim.sh` les efface par défaut. |
 | Aucun topic `/fmu/*` | Agent Micro XRCE-DDS absent ou non démarré (§4) |
 | `bad interpreter: /usr/bin/env bash^M` | Fins de ligne CRLF. `.gitattributes` force LF ; refaire `git checkout`. |
 | Erreur de compilateur incompréhensible pendant PX4 | OOM. Réduire `PX4_BUILD_JOBS`. |

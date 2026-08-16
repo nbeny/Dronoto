@@ -14,10 +14,11 @@ find_package(dronoto_core REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(px4_msgs REQUIRED)
 
 add_executable(mission_executive_node src/mission_executive_node.cpp)
 ament_target_dependencies(mission_executive_node
-  rclcpp dronoto_msgs dronoto_core geometry_msgs std_msgs std_srvs
+  rclcpp dronoto_msgs dronoto_core geometry_msgs std_msgs std_srvs px4_msgs
 )
 
 install(TARGETS mission_executive_node DESTINATION lib/${PROJECT_NAME})
