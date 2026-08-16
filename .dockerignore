@@ -1,0 +1,17 @@
+# Artefacts de build : jamais dans le contexte Docker
+**/build/
+**/install/
+**/log/
+tests/results/
+
+# Volumineux et inutiles a la construction
+.git/
+docs/
+models/**/*.onnx
+simulation/px4/PX4-Autopilot/
+
+# Caches
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/

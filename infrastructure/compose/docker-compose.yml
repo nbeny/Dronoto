@@ -1,0 +1,40 @@
+# Profils :
+#   drone : nœuds embarqués seuls (PX4 SITL tourne sur l'hôte)
+#   test  : compilation et tests unitaires en conteneur
+#
+# network_mode: host est INDISPENSABLE. La découverte DDS utilise le multicast,
+# que le réseau bridge de Docker isole entre conteneurs — sans erreur visible :
+# les nœuds ne se voient simplement pas.
+# Voir docs/architecture/13-docker-infra.md, section 4.
+#
+# Le profil `sim` (Gazebo en conteneur) arrive en P6, quand les campagnes
+# Monte-Carlo ont besoin d'exécutions isolées. En P1 le développement est
+# natif, ce qui est plus rapide à itérer.
+
+services:
+
+  drone:
+    profiles: ["drone", "full"]
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/drone/Dockerfile
+    image: dronoto-drone:latest
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+    command: >
+      bash -lc "ros2 launch dronoto_bringup bringup_drone.launch.py autostart:=false"
+
+  test:
+    profiles: ["test"]
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/drone/Dockerfile
+      target: builder
+    image: dronoto-drone-builder:latest
+    network_mode: host
+    command: >
+      bash -lc "source /opt/ros/jazzy/setup.bash && cd /ws &&
+                colcon test --packages-select dronoto_core &&
+                colcon test-result --verbose"
