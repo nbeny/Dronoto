@@ -12,6 +12,7 @@ find_package(Eigen3 REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
   src/frame_conversions.cpp
+  src/safety_state_machine.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -34,6 +35,9 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_frame_conversions test/test_frame_conversions.cpp)
   target_link_libraries(test_frame_conversions ${PROJECT_NAME})
+
+  ament_add_gtest(test_safety_state_machine test/test_safety_state_machine.cpp)
+  target_link_libraries(test_safety_state_machine ${PROJECT_NAME})
 endif()
 
 ament_package()
