@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pre-commit
+      - run: pre-commit run --all-files --show-diff-on-failure
+
+  conformance:
+    # Tests d'architecture : Python pur, aucune dépendance ROS, < 1 s.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pytest pyyaml
+      - run: pytest tests/conformance/ -v
+
+  build-and-test:
+    runs-on: ubuntu-24.04
+    container:
+      image: ros:jazzy-ros-base
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer les dépendances
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            python3-colcon-common-extensions \
+            libeigen3-dev \
+            ros-jazzy-tf2-ros \
+            ros-jazzy-tf2-eigen \
+            ros-jazzy-ament-cmake-gtest \
+            ros-jazzy-robot-state-publisher \
+            ros-jazzy-xacro \
+            git
+
+      - name: Préparer le workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /ws/src
+          ln -s "$GITHUB_WORKSPACE/interfaces/ros_msgs/dronoto_msgs" /ws/src/dronoto_msgs
+          for pkg in dronoto_core dronoto_interface dronoto_safety \
+                     dronoto_navigation dronoto_mission dronoto_bringup; do
+            if [ -d "$GITHUB_WORKSPACE/drone/ros2/$pkg" ]; then
+              ln -s "$GITHUB_WORKSPACE/drone/ros2/$pkg" "/ws/src/$pkg"
+            fi
+          done
+
+          # px4_msgs DOIT correspondre à la version verrouillée dans
+          # simulation/px4/PX4_VERSION : un désalignement produit des messages
+          # silencieusement corrompus (docs/architecture/05-integration-px4.md).
+          PX4_VERSION="$(grep -v '^#' "$GITHUB_WORKSPACE/simulation/px4/PX4_VERSION" \
+            | grep -v '^[[:space:]]*$' | head -1 | tr -d '[:space:]')"
+          PX4_BRANCH="release/${PX4_VERSION#v}"
+          PX4_BRANCH="${PX4_BRANCH%.*}"
+          echo "px4_msgs : $PX4_BRANCH (depuis $PX4_VERSION)"
+          git clone --depth 1 -b "$PX4_BRANCH" \
+            https://github.com/PX4/px4_msgs.git /ws/src/px4_msgs
+
+      - name: Construire
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          cd /ws
+          colcon build --symlink-install --event-handlers console_cohesion+
+
+      - name: Tester
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          cd /ws
+          # px4_msgs est un paquet tiers : ses tests ne sont pas notre
+          # responsabilité et allongent la CI de plusieurs minutes.
+          colcon test --packages-skip px4_msgs --event-handlers console_direct+
+          colcon test-result --verbose
